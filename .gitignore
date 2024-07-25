@@ -1,0 +1,6 @@
+.idea
+cmake-build-*
+nasm-*
+data/*
+!data/*.asm
+data/test.asm
