@@ -16,6 +16,7 @@ std::string word_to_hex(const uint16_t number) {
     oss << "0x" << std::hex << std::setw(4) << std::setfill('0') << (static_cast<int>(number) & 0xFFFF);
     return oss.str();
 }
+
 namespace ModNamespace {
     enum class Mod {
       MemoryMode,
@@ -153,26 +154,24 @@ private:
 };
 
 
-const std::array<Register, 8> slim_registers = {
-        Register{"AL", 8}, // 0b000
-        Register{"CL", 8}, // 0b001
-        Register{"DL", 8}, // 0b010
-        Register{"BL", 8}, // 0b011
-        Register{"AH", 8}, // 0b100
-        Register{"CH", 8}, // 0b101
-        Register{"DH", 8}, // 0b110
-        Register{"BH", 8}, // 0b111
-};
-
-const std::array<Register, 8> wide_registers = {
-        Register{"AX", 16}, // 0b000
-        Register{"CX", 16}, // 0b001
-        Register{"DX", 16}, // 0b010
-        Register{"BX", 16}, // 0b011
-        Register{"SP", 16}, // 0b100
-        Register{"BP", 16}, // 0b101
-        Register{"SI", 16}, // 0b110
-        Register{"DI", 16}, // 0b111
+// Index is 0bW_XXX where W is the wide bit and XXX is the register mask
+const std::array<Register, 16> REGISTERS = {
+        Register{"AL", 8}, // 0b0_000
+        Register{"CL", 8}, // 0b0_001
+        Register{"DL", 8}, // 0b0_010
+        Register{"BL", 8}, // 0b0_011
+        Register{"AH", 8}, // 0b0_100
+        Register{"CH", 8}, // 0b0_101
+        Register{"DH", 8}, // 0b0_110
+        Register{"BH", 8}, // 0b0_111
+        Register{"AX", 16}, // 0b1_000
+        Register{"CX", 16}, // 0b1_001
+        Register{"DX", 16}, // 0b1_010
+        Register{"BX", 16}, // 0b1_011
+        Register{"SP", 16}, // 0b1_100
+        Register{"BP", 16}, // 0b1_101
+        Register{"SI", 16}, // 0b1_110
+        Register{"DI", 16}, // 0b1_111
 };
 
 class EffectiveAddress {
@@ -188,7 +187,7 @@ private:
     std::string name;
 };
 
-const std::array<EffectiveAddress, 8> effective_addresses = {
+const std::array<EffectiveAddress, 8> EFFECTIVE_ADDRESSES = {
         EffectiveAddress{"BX+SI"}, // 0b000
         EffectiveAddress{"BX+DI"}, // 0b001
         EffectiveAddress{"BP+SI"}, // 0b010
@@ -226,11 +225,8 @@ Operation decode_operation(const uint8_t op_byte) {
 }
 
 Register decode_register(const uint8_t reg_mask, const bool wide) {
-    if (wide) {
-        return wide_registers[reg_mask];
-    } else {
-        return slim_registers[reg_mask];
-    }
+    const auto i = static_cast<uint8_t>(wide) << 3 | reg_mask;
+    return REGISTERS[i];
 }
 
 std::array<Register, 2> decode_registers_for_register_mode(const uint8_t second_byte, const bool wide, const bool direction) {
@@ -243,7 +239,7 @@ std::array<Register, 2> decode_registers_for_register_mode(const uint8_t second_
 }
 
 EffectiveAddress decode_effective_address(const uint8_t mask) {
-    return effective_addresses[mask];
+    return EFFECTIVE_ADDRESSES[mask];
 }
 
 std::string decode_operands_for_mov_memory_mode(uint8_t second_byte, const bool wide, const bool direction) {
@@ -322,7 +318,7 @@ std::string decode_operands_for_mov_reg_memory_to_from_reg(uint8_t first_byte, s
     return oss.str();
 }
 
-std::string decode_operands_for_mov_immediate_to_reg(uint8_t first_byte, std::istreambuf_iterator<char> &instructions) {
+std::string decode_operands_for_mov_immediate_to_reg(const uint8_t first_byte, std::istreambuf_iterator<char> &instructions) {
     // Check 3d bit to determine wide or not
     bool wide = first_byte & 0b1000;
 
@@ -375,7 +371,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    std::string filename = argv[1];
+    const auto filename = argv[1];
 
     auto stream = FileCharStream{filename};
     auto instructions = stream.iterator();
