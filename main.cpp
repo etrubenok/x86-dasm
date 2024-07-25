@@ -153,26 +153,26 @@ private:
 };
 
 
-std::map<uint8_t, Register> slim_registers = {
-        {0b000, Register{"AL", 8}},
-        {0b001, Register{"CL", 8}},
-        {0b010, Register{"DL", 8}},
-        {0b011, Register{"BL", 8}},
-        {0b100, Register{"AH", 8}},
-        {0b101, Register{"CH", 8}},
-        {0b110, Register{"DH", 8}},
-        {0b111, Register{"BH", 8}},
+const std::array<Register, 8> slim_registers = {
+        Register{"AL", 8}, // 0b000
+        Register{"CL", 8}, // 0b001
+        Register{"DL", 8}, // 0b010
+        Register{"BL", 8}, // 0b011
+        Register{"AH", 8}, // 0b100
+        Register{"CH", 8}, // 0b101
+        Register{"DH", 8}, // 0b110
+        Register{"BH", 8}, // 0b111
 };
 
-std::map<uint8_t, Register> wide_registers = {
-        {0b000, Register{"AX", 16}},
-        {0b001, Register{"CX", 16}},
-        {0b010, Register{"DX", 16}},
-        {0b011, Register{"BX", 16}},
-        {0b100, Register{"SP", 16}},
-        {0b101, Register{"BP", 16}},
-        {0b110, Register{"SI", 16}},
-        {0b111, Register{"DI", 16}},
+const std::array<Register, 8> wide_registers = {
+        Register{"AX", 16}, // 0b000
+        Register{"CX", 16}, // 0b001
+        Register{"DX", 16}, // 0b010
+        Register{"BX", 16}, // 0b011
+        Register{"SP", 16}, // 0b100
+        Register{"BP", 16}, // 0b101
+        Register{"SI", 16}, // 0b110
+        Register{"DI", 16}, // 0b111
 };
 
 class EffectiveAddress {
@@ -188,15 +188,15 @@ private:
     std::string name;
 };
 
-std::map<uint8_t, EffectiveAddress> effective_addresses = {
-        {0b000, EffectiveAddress{"BX+SI"}},
-        {0b001, EffectiveAddress{"BX+DI"}},
-        {0b010, EffectiveAddress{"BP+SI"}},
-        {0b011, EffectiveAddress{"BP+DI"}},
-        {0b100, EffectiveAddress{"SI"}},
-        {0b101, EffectiveAddress{"DI"}},
-        {0b110, EffectiveAddress{"BP"}},
-        {0b111, EffectiveAddress{"BX"}},
+const std::array<EffectiveAddress, 8> effective_addresses = {
+        EffectiveAddress{"BX+SI"}, // 0b000
+        EffectiveAddress{"BX+DI"}, // 0b001
+        EffectiveAddress{"BP+SI"}, // 0b010
+        EffectiveAddress{"BP+DI"}, // 0b011
+        EffectiveAddress{"SI"}, // 0b100
+        EffectiveAddress{"DI"}, // 0b101
+        EffectiveAddress{"BP"}, // 0b110
+        EffectiveAddress{"BX"}, // 0b111
 };
 
 class FileCharStream {
@@ -227,19 +227,9 @@ Operation decode_operation(const uint8_t op_byte) {
 
 Register decode_register(const uint8_t reg_mask, const bool wide) {
     if (wide) {
-        auto reg = wide_registers.find(reg_mask);
-        if (reg == wide_registers.end()) {
-            std::cerr << "Error: unknown register " << byte_to_hex(reg_mask) << std::endl;
-            return Register{"", 0};
-        }
-        return reg->second;
+        return wide_registers[reg_mask];
     } else {
-        auto reg = slim_registers.find(reg_mask);
-        if (reg == slim_registers.end()) {
-            std::cerr << "Error: unknown register "<< byte_to_hex(reg_mask) << std::endl;
-            return Register{"", 0};
-        }
-        return reg->second;
+        return slim_registers[reg_mask];
     }
 }
 
@@ -253,12 +243,7 @@ std::array<Register, 2> decode_registers_for_register_mode(const uint8_t second_
 }
 
 EffectiveAddress decode_effective_address(const uint8_t mask) {
-    auto ea = effective_addresses.find(mask);
-    if (ea == effective_addresses.end()) {
-        std::cerr << "Error: unknown effective address " << byte_to_hex(mask) << std::endl;
-        return EffectiveAddress{""};
-    }
-    return ea->second;
+    return effective_addresses[mask];
 }
 
 std::string decode_operands_for_mov_memory_mode(uint8_t second_byte, const bool wide, const bool direction) {
