@@ -254,16 +254,24 @@ std::string decode_operands_for_mov_memory_mode(uint8_t second_byte, const bool 
     return oss.str();
 }
 
+inline std::string generate_effective_address8_output(const EffectiveAddress& ea, const uint8_t third_byte) {
+    return "[" + ea.get_name() + "+" + byte_to_hex(third_byte) + "]";
+}
+
 std::string decode_operands_for_mov_memory_mode8(const uint8_t second_byte, const bool wide, const bool direction, const uint8_t third_byte) {
     auto reg = decode_register((second_byte >> 3) & 0b111, wide);
     auto ea = decode_effective_address(second_byte & 0b111);
     std::ostringstream oss;
     if (direction) {
-        oss << reg.get_name() << ", [" << ea.get_name() << "+" << byte_to_hex(third_byte) << "]";
+        oss << reg.get_name() << ", " << generate_effective_address8_output(ea, third_byte);
     } else {
-        oss << "[" << ea.get_name() << "+" << byte_to_hex(third_byte) << "], " << reg.get_name();
+        oss << generate_effective_address8_output(ea, third_byte) << ", " << reg.get_name();
     }
     return oss.str();
+}
+
+inline std::string generate_effective_address16_output(const EffectiveAddress& ea, const uint8_t third_byte, const uint8_t forth_byte) {
+    return "[" + ea.get_name() + "+" + word_to_hex((static_cast<uint16_t>(forth_byte) << 8) | third_byte) + "]";
 }
 
 std::string decode_operands_for_mov_memory_mode16(const uint8_t second_byte, const bool wide, const bool direction, const uint8_t third_byte, const uint8_t forth_byte) {
@@ -271,9 +279,9 @@ std::string decode_operands_for_mov_memory_mode16(const uint8_t second_byte, con
     auto ea = decode_effective_address(second_byte & 0b111);
     std::ostringstream oss;
     if (direction) {
-        oss << reg.get_name() << ", [" << ea.get_name() << "+" << word_to_hex((static_cast<uint16_t>(forth_byte) << 8) | third_byte) << "]";
+        oss << reg.get_name() << ", " << generate_effective_address16_output(ea, third_byte, forth_byte);
     } else {
-        oss << "[" << ea.get_name() << "+" << word_to_hex((static_cast<uint16_t>(forth_byte) << 8) | third_byte) << "], " << reg.get_name();
+        oss << generate_effective_address16_output(ea, third_byte, forth_byte) << ", " << reg.get_name();
     }
     return oss.str();
 }
