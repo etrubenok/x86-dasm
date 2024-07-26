@@ -7,13 +7,31 @@
 
 std::string byte_to_hex(const uint8_t number) {
     std::ostringstream oss;
-    oss << "0x" << std::hex << std::setw(2) << std::setfill('0') << (static_cast<int>(number) & 0xFF);
+    oss << "0x" << std::hex << std::setw(2) << std::setfill('0') << (static_cast<uint8_t>(number) & 0xFF);
     return oss.str();
 }
 
 std::string word_to_hex(const uint16_t number) {
     std::ostringstream oss;
-    oss << "0x" << std::hex << std::setw(4) << std::setfill('0') << (static_cast<int>(number) & 0xFFFF);
+    oss << "0x" << std::hex << std::setw(4) << std::setfill('0') << (static_cast<uint16_t>(number) & 0xFFFF);
+    return oss.str();
+}
+
+std::string disp_addr8_to_hex(const uint8_t addr8) {
+    auto addr = static_cast<int8_t>(addr8); // Convert to signed 8-bit integer
+    std::string sign = addr < 0 ? "-" : "+";
+
+    std::ostringstream oss;
+    oss << sign << "0x" << std::hex << std::setw(2) << std::setfill('0') << std::abs(addr);
+    return oss.str();
+}
+
+std::string disp_addr16_to_hex(const uint16_t addr16) {
+    auto addr = static_cast<int16_t>(addr16); // Convert to signed 16-bit integer
+    std::string sign = addr < 0 ? "-" : "+";
+
+    std::ostringstream oss;
+    oss << sign << "0x" << std::hex << std::setw(4) << std::setfill('0') << std::abs(addr);
     return oss.str();
 }
 
@@ -54,6 +72,7 @@ namespace OperationTypeNamespace {
       MOV_REG_MEMORY_TO_FROM_REG,
       MOV_IMMEDIATE_TO_REG_MEMORY,
       MOV_IMMEDIATE_TO_REG,
+      MOV_IMMEDIATE_TO_MEMORY,
       MOV_MEMORY_TO_ACC,
       MOV_ACC_TO_MEMORY,
       MOV_REG_MEMORY_TO_SEGREG,
@@ -68,6 +87,7 @@ namespace OperationTypeNamespace {
         case OperationType::MOV_REG_MEMORY_TO_FROM_REG:
         case OperationType::MOV_IMMEDIATE_TO_REG_MEMORY:
         case OperationType::MOV_IMMEDIATE_TO_REG:
+        case OperationType::MOV_IMMEDIATE_TO_MEMORY:
         case OperationType::MOV_MEMORY_TO_ACC:
         case OperationType::MOV_ACC_TO_MEMORY:
         case OperationType::MOV_REG_MEMORY_TO_SEGREG:
@@ -132,6 +152,9 @@ std::map<uint8_t, Operation> opcodes = {
         {0xBD, Operation{"MOV REG16, IMM16", OperationType::MOV_IMMEDIATE_TO_REG}},
         {0xBE, Operation{"MOV REG16, IMM16", OperationType::MOV_IMMEDIATE_TO_REG}},
         {0xBF, Operation{"MOV REG16, IMM16", OperationType::MOV_IMMEDIATE_TO_REG}},
+
+        {0xC6, Operation{"MOV MEM8, IMM8", OperationType::MOV_IMMEDIATE_TO_MEMORY}},
+        {0xC7, Operation{"MOV MEM16, IMM16", OperationType::MOV_IMMEDIATE_TO_MEMORY}},
 };
 
 class Register {
@@ -186,6 +209,14 @@ public:
 private:
     std::string name;
 };
+
+inline std::string generate_effective_address8_output(const EffectiveAddress& ea, const uint8_t third_byte) {
+    return "[" + ea.get_name()  +disp_addr8_to_hex(third_byte) + "]";
+}
+
+inline std::string generate_effective_address16_output(const EffectiveAddress& ea, const uint8_t third_byte, const uint8_t forth_byte) {
+    return "[" + ea.get_name() +disp_addr16_to_hex((static_cast<uint16_t>(forth_byte) << 8) | third_byte) + "]";
+}
 
 const std::array<EffectiveAddress, 8> EFFECTIVE_ADDRESSES = {
         EffectiveAddress{"BX+SI"}, // 0b000
@@ -242,9 +273,15 @@ EffectiveAddress decode_effective_address(const uint8_t mask) {
     return EFFECTIVE_ADDRESSES[mask];
 }
 
-std::string decode_operands_for_mov_memory_mode(uint8_t second_byte, const bool wide, const bool direction) {
+std::string decode_operands_for_mov_memory_mode(const uint8_t second_byte, const bool wide, const bool direction, std::istreambuf_iterator<char> &instructions) {
     auto reg = decode_register((second_byte >> 3) & 0b111, wide);
     auto ea = decode_effective_address(second_byte & 0b111);
+    if ((second_byte & 0b111) == 0b110) {
+        // Direct address case. Direct address is always a 16-bit address
+        uint8_t addr_l = *(++instructions);
+        uint8_t addr_h = *(++instructions);
+        ea = EffectiveAddress{word_to_hex((static_cast<uint16_t>(addr_h) << 8) | addr_l)};
+    }
     std::ostringstream oss;
     if (direction) {
         oss << reg.get_name() << ", [" << ea.get_name() << "]";
@@ -254,8 +291,46 @@ std::string decode_operands_for_mov_memory_mode(uint8_t second_byte, const bool 
     return oss.str();
 }
 
-inline std::string generate_effective_address8_output(const EffectiveAddress& ea, const uint8_t third_byte) {
-    return "[" + ea.get_name() + "+" + byte_to_hex(third_byte) + "]";
+std::string decode_operands_for_mov_memory_mode_immediate8(const uint8_t second_byte, const uint8_t immediate) {
+    auto ea = decode_effective_address(second_byte & 0b111);
+    std::ostringstream oss;
+    oss << "[" << ea.get_name() << "], " << "byte " << byte_to_hex(immediate);
+    return oss.str();
+}
+
+std::string decode_operands_for_mov_memory_mode_immediate16(const uint8_t second_byte, const uint16_t immediate) {
+    auto ea = decode_effective_address(second_byte & 0b111);
+    std::ostringstream oss;
+    oss << "[" << ea.get_name() << "], " << "word " << byte_to_hex(immediate);
+    return oss.str();
+}
+
+std::string decode_operands_for_mov_memory_mode8_immediate8(const uint8_t second_byte, const uint8_t third_byte, const uint8_t immediate) {
+    auto ea = decode_effective_address(second_byte & 0b111);
+    std::ostringstream oss;
+    oss << generate_effective_address8_output(ea, third_byte) << ", " << "byte " << byte_to_hex(immediate);
+    return oss.str();
+}
+
+std::string decode_operands_for_mov_memory_mode8_immediate16(const uint8_t second_byte, const uint8_t third_byte, const uint16_t immediate) {
+    auto ea = decode_effective_address(second_byte & 0b111);
+    std::ostringstream oss;
+    oss << generate_effective_address8_output(ea, third_byte) << ", " << "word " << byte_to_hex(immediate);
+    return oss.str();
+}
+
+std::string decode_operands_for_mov_memory_mode16_immediate8(const uint8_t second_byte, const uint8_t third_byte, const uint8_t fourth_byte, const uint8_t immediate) {
+    auto ea = decode_effective_address(second_byte & 0b111);
+    std::ostringstream oss;
+    oss << generate_effective_address16_output(ea, third_byte, fourth_byte) << ", " << "byte " << byte_to_hex(immediate);
+    return oss.str();
+}
+
+std::string decode_operands_for_mov_memory_mode16_immediate16(const uint8_t second_byte, const uint8_t third_byte, const uint8_t fourth_byte, const uint16_t immediate) {
+    auto ea = decode_effective_address(second_byte & 0b111);
+    std::ostringstream oss;
+    oss << generate_effective_address16_output(ea, third_byte, fourth_byte) << ", " << "word " << word_to_hex(immediate);
+    return oss.str();
 }
 
 std::string decode_operands_for_mov_memory_mode8(const uint8_t second_byte, const bool wide, const bool direction, const uint8_t third_byte) {
@@ -270,9 +345,6 @@ std::string decode_operands_for_mov_memory_mode8(const uint8_t second_byte, cons
     return oss.str();
 }
 
-inline std::string generate_effective_address16_output(const EffectiveAddress& ea, const uint8_t third_byte, const uint8_t forth_byte) {
-    return "[" + ea.get_name() + "+" + word_to_hex((static_cast<uint16_t>(forth_byte) << 8) | third_byte) + "]";
-}
 
 std::string decode_operands_for_mov_memory_mode16(const uint8_t second_byte, const bool wide, const bool direction, const uint8_t third_byte, const uint8_t forth_byte) {
     auto reg = decode_register((second_byte >> 3) & 0b111, wide);
@@ -303,7 +375,7 @@ std::string decode_operands_for_mov_reg_memory_to_from_reg(uint8_t first_byte, s
     auto mode = decode_mod(second_byte);
     switch (mode) {
         case Mod::MemoryMode: {
-            oss << decode_operands_for_mov_memory_mode(second_byte, wide, direction);
+            oss << decode_operands_for_mov_memory_mode(second_byte, wide, direction, instructions);
             break;
         }
         case Mod::MemoryMode8: {
@@ -347,19 +419,101 @@ std::string decode_operands_for_mov_immediate_to_reg(const uint8_t first_byte, s
     return oss.str();
 }
 
-void disassemble(std::istreambuf_iterator<char> &instructions) {
+std::string decode_operands_for_mov_immediate_to_memory(const uint8_t first_byte, std::istreambuf_iterator<char> &instructions) {
+    // Check 0th bit to determine wide or not
+    bool wide = first_byte & 0b1;
+
+    std::ostringstream oss;
+
+    const uint8_t second_byte = *instructions;
+    // Get MODE
+    auto mode = decode_mod(second_byte);
+    switch (mode) {
+    case Mod::MemoryMode: {
+        if (wide) {
+            uint8_t third_byte = *(++instructions);
+            uint8_t forth_byte = *(++instructions);
+            oss << decode_operands_for_mov_memory_mode_immediate16(second_byte, (static_cast<uint16_t>(forth_byte) << 8) | third_byte);
+        } else {
+            uint8_t third_byte = *(++instructions);
+            oss << decode_operands_for_mov_memory_mode_immediate8(second_byte, third_byte);
+        }
+        break;
+    }
+    case Mod::MemoryMode8: {
+        if (wide) {
+            uint8_t third_byte = *(++instructions);
+            uint8_t forth_byte = *(++instructions);
+            uint8_t fifth_byte = *(++instructions);
+            oss << decode_operands_for_mov_memory_mode8_immediate16(second_byte, third_byte, (static_cast<uint16_t>(fifth_byte) << 8) | forth_byte);
+        } else {
+            uint8_t third_byte = *(++instructions);
+            uint8_t forth_byte = *(++instructions);
+            oss << decode_operands_for_mov_memory_mode8_immediate8(second_byte, third_byte, forth_byte);
+        }
+        break;
+    }
+    case Mod::MemoryMode16: {
+        if (wide) {
+            uint8_t third_byte = *(++instructions);
+            uint8_t forth_byte = *(++instructions);
+            uint8_t fifth_byte = *(++instructions);
+            uint8_t sixth_byte = *(++instructions);
+            oss << decode_operands_for_mov_memory_mode16_immediate16(second_byte, third_byte, forth_byte, (static_cast<uint16_t>(sixth_byte) << 8) | fifth_byte);
+        } else {
+            uint8_t third_byte = *(++instructions);
+            uint8_t forth_byte = *(++instructions);
+            uint8_t fifth_byte = *(++instructions);
+            oss << decode_operands_for_mov_memory_mode16_immediate8(second_byte, third_byte, forth_byte, fifth_byte);
+        }
+        break;
+    }
+    }
+    return oss.str();
+}
+
+std::string decode_operands_for_mov_acc_memory(const uint8_t first_byte, std::istreambuf_iterator<char> &instructions) {
+    // Get direction
+    bool direction = first_byte & 0b10;
+
+    // Get wide
+    bool wide = first_byte & 0b1;
+
+    std::ostringstream oss;
+    uint8_t addr_lo = *(++instructions);
+    uint8_t addr_hi = *(++instructions);
+    auto acc_name = wide ? "AX" : "AL";
+    if (direction) {
+        oss << "[" << word_to_hex((static_cast<uint16_t>(addr_hi) << 8) | addr_lo) << "], " << acc_name;
+    } else {
+        oss << acc_name << ", [" << word_to_hex((static_cast<uint16_t>(addr_hi) << 8) | addr_lo) << "]";
+    }
+    return oss.str();
+}
+
+void disassemble(uint16_t i, std::istreambuf_iterator<char> &instructions) {
     uint8_t first_byte = *instructions;
     auto operation = decode_operation(first_byte);
     switch (operation.get_op_type()) {
 
     case OperationType::MOV_REG_MEMORY_TO_FROM_REG:
         ++instructions;
-        std::cout << operation.get_op_type() << " " << decode_operands_for_mov_reg_memory_to_from_reg(first_byte, instructions) << std::endl;
+        std::cout  << operation.get_op_type() << " " << decode_operands_for_mov_reg_memory_to_from_reg(first_byte, instructions) << std::endl;
         break;
 
     case OperationType::MOV_IMMEDIATE_TO_REG:
         ++instructions;
         std::cout << operation.get_op_type() << " " << decode_operands_for_mov_immediate_to_reg(first_byte, instructions) << std::endl;
+        break;
+
+    case OperationType::MOV_IMMEDIATE_TO_MEMORY:
+        ++instructions;
+        std::cout << operation.get_op_type() << " " << decode_operands_for_mov_immediate_to_memory(first_byte, instructions) << std::endl;
+        break;
+
+    case OperationType::MOV_MEMORY_TO_ACC:
+    case OperationType::MOV_ACC_TO_MEMORY:
+        std::cout << operation.get_op_type() << " " << decode_operands_for_mov_acc_memory(first_byte, instructions) << std::endl;
         break;
 
     case OperationType::UNKNOWN:
@@ -385,9 +539,11 @@ int main(int argc, char *argv[])
     auto instructions = stream.iterator();
 
     std::cout << "bits 16" << std::endl;
+    auto i = 0;
     while (instructions != std::istreambuf_iterator<char>{}) {
-        disassemble(instructions);
+        disassemble(i, instructions);
         ++instructions;
+        ++i;
     }
     return 0;
 }
